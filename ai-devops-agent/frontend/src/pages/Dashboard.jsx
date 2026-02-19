@@ -1,14 +1,14 @@
-import ResultTable from '../components/ResultTable';
+import FixTable from '../components/FixTable';
 import Timeline from '../components/Timeline';
-import ScoreCard from '../components/ScoreCard';
+import StatusCard from '../components/StatusCard';
 
 function Dashboard() {
   return (
     <main>
       <h1>Dashboard</h1>
-      <ScoreCard />
+      <StatusCard />
       <Timeline />
-      <ResultTable />
+      <FixTable />
     </main>
   );
 }

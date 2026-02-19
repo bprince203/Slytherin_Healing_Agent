@@ -1,9 +1,7 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import agentRoutes from './routes/agentRoutes.js';
-
-dotenv.config();
+import { env } from './config/env.js';
 
 const app = express();
 app.use(cors());
@@ -15,7 +13,6 @@ app.get('/health', (_req, res) => {
 
 app.use('/api/agent', agentRoutes);
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Backend running on port ${PORT}`);
+app.listen(env.port, () => {
+  console.log(`Express backend running on port ${env.port}`);
 });
