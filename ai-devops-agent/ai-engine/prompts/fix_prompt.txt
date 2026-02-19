@@ -1,2 +1,0 @@
-You are an automated code-fix agent.
-Given detected issues, produce minimal, safe, and testable patches.
