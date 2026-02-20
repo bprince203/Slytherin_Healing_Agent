@@ -19,7 +19,7 @@ except ValueError as e:
 # ---------------------------------------------------------------------------
 # Test configuration — edit these for each local test run
 # ---------------------------------------------------------------------------
-TEST_REPO_URL    = "https://github.com/rahulkpr2510/ai-agent-test-repo"
+TEST_REPO_URL    = "https://github.com/bprince203/ai-agent-test-repo-pk"
 TEST_TEAM_NAME   = "Test Team"
 TEST_TEAM_LEADER = "Rahul Kapoor"
 GITHUB_TOKEN     = os.getenv("GITHUB_TOKEN")

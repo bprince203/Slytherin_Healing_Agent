@@ -10,6 +10,7 @@
     "format": "prettier --write ."
   },
   "dependencies": {
+    "@clerk/nextjs": "^6.38.0",
     "@radix-ui/react-slot": "^1.1.1",
     "canvas-confetti": "^1.9.3",
     "class-variance-authority": "^0.7.1",
@@ -24,11 +25,11 @@
     "tailwind-merge": "^2.6.0"
   },
   "devDependencies": {
+    "@types/canvas-confetti": "^1.6.4",
     "@types/node": "^22.13.1",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
     "@types/react-window": "^1.8.8",
-    "@types/canvas-confetti": "^1.6.4",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.20.0",
     "eslint-config-next": "^15.1.7",

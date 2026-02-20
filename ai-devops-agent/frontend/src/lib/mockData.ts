@@ -1,4 +1,4 @@
-import type { FixSuggestion, LogLine, MetricItem, PipelineStep, RepoInfo, RepoRun } from '@/types';
+import type { FixSuggestion, LogLine, MetricItem, PipelineStep, RepoInfo, RepoRun, RunSummary } from '@/types';
 
 export const exampleRepos: string[] = [
   'https://github.com/vercel/next.js',
@@ -117,3 +117,17 @@ export const historyRuns: RepoRun[] = [
     testsPassed: false,
   },
 ];
+
+export const defaultRunSummary: RunSummary = {
+  repositoryUrl: 'https://github.com/acme/inventory-api',
+  teamName: 'platform_team',
+  teamLeaderName: 'jane_doe',
+  branchName: 'PLATFORM_TEAM_JANE_DOE_AI_Fix',
+  totalFailuresDetected: 2,
+  totalFixesApplied: 2,
+  finalStatus: 'PASSED',
+  startedAtIso: '2026-02-19T08:29:00.000Z',
+  finishedAtIso: '2026-02-19T08:33:12.000Z',
+  totalTimeTaken: '4m 12s',
+  mode: 'run-agent',
+};

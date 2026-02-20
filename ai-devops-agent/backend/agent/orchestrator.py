@@ -10,6 +10,7 @@ from agent.nodes.git_commit import git_commit
 from agent.nodes.create_pull_request import create_pull_request
 from agent.nodes.ci_monitor import ci_monitor
 from agent.nodes.finalize import finalize
+from typing import Callable, Any
 
 
 # ---------------------------------------------------------------------------
@@ -40,20 +41,68 @@ def route_after_initial_test(state: AgentState) -> str:
 # Graph builder
 # ---------------------------------------------------------------------------
 
-def build_graph() -> StateGraph:
+def _emit(observer: Callable[[dict[str, Any]], None] | None, payload: dict[str, Any]) -> None:
+    if observer is None:
+        return
+    try:
+        observer(payload)
+    except Exception:
+        pass
+
+
+def _wrap_node(node_name: str, node_fn, observer: Callable[[dict[str, Any]], None] | None):
+    def wrapped(state: AgentState) -> AgentState:
+        _emit(
+            observer,
+            {
+                "event": "node_start",
+                "node": node_name,
+                "iteration": state.iteration,
+                "final_status": state.final_status,
+            },
+        )
+
+        next_state = node_fn(state)
+
+        _emit(
+            observer,
+            {
+                "event": "node_end",
+                "node": node_name,
+                "iteration": next_state.iteration,
+                "final_status": next_state.final_status,
+                "test_passed": next_state.test_passed,
+                "failures_count": next_state.total_failures,
+                "fixes_count": next_state.total_fixes_applied,
+                "commits_count": len(next_state.commits),
+                "read_only": next_state.read_only,
+                "push_attempted": next_state.push_attempted,
+                "latest_failure": next_state.failures[-1].model_dump() if next_state.failures else None,
+                "latest_fix": next_state.fixes[-1].model_dump() if next_state.fixes else None,
+                "latest_commit": next_state.commits[-1] if next_state.commits else None,
+                "pr_url": next_state.pr_url,
+                "raw_test_output_tail": (next_state.raw_test_output or "")[-1200:],
+            },
+        )
+        return next_state
+
+    return wrapped
+
+
+def build_graph(observer: Callable[[dict[str, Any]], None] | None = None) -> StateGraph:
     g = StateGraph(AgentState)
 
     # --- Register all nodes ---
-    g.add_node("repo",      repo_analyzer)
-    g.add_node("detect_lang", language_detector)
-    g.add_node("test",      test_runner)
-    g.add_node("classify",  failure_classifier)
-    g.add_node("fix",       fix_generator)
-    g.add_node("patch",     patch_applier)
-    g.add_node("commit",    git_commit)
-    g.add_node("create_pr", create_pull_request)   # ← NEW
-    g.add_node("ci",        ci_monitor)
-    g.add_node("final",     finalize)
+    g.add_node("repo", _wrap_node("repo", repo_analyzer, observer))
+    g.add_node("detect_lang", _wrap_node("detect_lang", language_detector, observer))
+    g.add_node("test", _wrap_node("test", test_runner, observer))
+    g.add_node("classify", _wrap_node("classify", failure_classifier, observer))
+    g.add_node("fix", _wrap_node("fix", fix_generator, observer))
+    g.add_node("patch", _wrap_node("patch", patch_applier, observer))
+    g.add_node("commit", _wrap_node("commit", git_commit, observer))
+    g.add_node("create_pr", _wrap_node("create_pr", create_pull_request, observer))
+    g.add_node("ci", _wrap_node("ci", ci_monitor, observer))
+    g.add_node("final", _wrap_node("final", finalize, observer))
 
     # --- Entry point ---
     g.set_entry_point("repo")
@@ -105,6 +154,8 @@ def run_agent(
     team_leader: str,
     github_token: str = None,
     max_iterations: int = 5,
+    read_only: bool = False,
+    observer: Callable[[dict[str, Any]], None] | None = None,
 ) -> AgentState:
 
     initial_state = AgentState(
@@ -112,10 +163,11 @@ def run_agent(
         team_name=team_name,
         team_leader=team_leader,
         github_token=github_token,
+        read_only=read_only,
         max_iterations=max_iterations,
     )
 
-    graph = build_graph()
+    graph = build_graph(observer=observer)
     result = graph.invoke(initial_state)
 
     if isinstance(result, dict):

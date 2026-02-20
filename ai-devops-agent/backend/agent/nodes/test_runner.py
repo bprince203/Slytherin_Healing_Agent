@@ -25,7 +25,7 @@ def test_runner(state: AgentState) -> AgentState:
     combined_output = []
 
     # 1. Run linter first — surfaces LINTING, IMPORT, INDENTATION errors
-    if state.lint_cmd:
+    if state.lint_cmd and not state.lint_checked_once:
         lint_out = _run_command(
             cmd=state.lint_cmd,
             cwd=state.repo_path,
@@ -34,6 +34,7 @@ def test_runner(state: AgentState) -> AgentState:
         )
         if lint_out:
             combined_output.append(lint_out)
+        state.lint_checked_once = True
 
     # 2. Run test suite — surfaces SYNTAX, LOGIC, TYPE_ERROR
     if not state.test_cmd:
@@ -118,7 +119,9 @@ def _install_dependencies(state: AgentState) -> None:
 
     if os.path.exists(package_json):
         print("[AI-AGENT] Installing Node dependencies from package.json...")
-        run("npm install --silent", cwd=repo_path, timeout=180)
+        package_lock = os.path.join(repo_path, "package-lock.json")
+        npm_cmd = "npm ci --silent --no-audit --no-fund" if os.path.exists(package_lock) else "npm install --silent --no-audit --no-fund"
+        run(npm_cmd, cwd=repo_path, timeout=180)
 
     if state.language == "python":
         run("pip install flake8 pytest -q", cwd=repo_path, timeout=60)

@@ -77,7 +77,7 @@ def _parse_flake8_output(output: str) -> list:
         match = pattern.search(line)
         if match:
             file, lineno, code, msg = match.groups()
-            file = file.lstrip("./").strip()
+            file = file.replace("\\", "/").lstrip("./").lstrip("/").strip()
             full_description = f"{code} {msg.strip()}"   # e.g. "E302 expected 2 blank lines, found 1"
             results.append((file, int(lineno), code, full_description))
     return results
@@ -112,7 +112,7 @@ def _parse_pytest_output(output: str) -> list:
             continue
 
         file, lineno, func = m.groups()
-        file = file.lstrip("./").strip()
+        file = file.replace("\\", "/").lstrip("./").lstrip("/").strip()
 
         # Only source files — skip test files
         if "test_" in file or file.startswith("tests/"):
@@ -140,7 +140,8 @@ def _parse_mypy_output(output: str) -> list:
         match = pattern.search(line)
         if match:
             file, lineno, msg = match.groups()
-            results.append((file.strip(), int(lineno), "TYPE_ERROR", f"TYPE_ERROR {msg.strip()}"))
+            file = file.replace("\\", "/").lstrip("./").lstrip("/").strip()
+            results.append((file, int(lineno), "TYPE_ERROR", f"TYPE_ERROR {msg.strip()}"))
     return results
 
 

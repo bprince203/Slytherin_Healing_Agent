@@ -9,10 +9,16 @@ interface UseLogStreamResult {
   toggleStreaming: () => void;
 }
 
-export function useLogStream(): UseLogStreamResult {
+export function useLogStream(runId?: string): UseLogStreamResult {
   const [logs, setLogs] = useState<LogLine[]>(mockLogs.slice(0, 4));
   const [cursor, setCursor] = useState<number>(4);
   const [isStreaming, setIsStreaming] = useState<boolean>(true);
+
+  useEffect(() => {
+    setLogs(mockLogs.slice(0, 4));
+    setCursor(4);
+    setIsStreaming(true);
+  }, [runId]);
 
   useEffect(() => {
     if (!isStreaming) return;

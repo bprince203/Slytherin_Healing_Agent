@@ -1,8 +1,0 @@
-{
-  "jobId": "job_001",
-  "status": "queued",
-  "summary": {
-    "issuesFound": 0,
-    "fixesApplied": 0
-  }
-}

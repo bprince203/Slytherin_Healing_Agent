@@ -18,9 +18,9 @@ LANGUAGE_MAP = {
 
 # Language → test command mapping
 TEST_COMMANDS = {
-    "python": "python -m pytest --tb=short -q",
-    "javascript": "npm test -- --runInBand",
-    "typescript": "npm test -- --runInBand",
+    "python": "python -m pytest --tb=short -q -x --maxfail=1",
+    "javascript": "npm test -- --runInBand --watch=false --bail=1",
+    "typescript": "npm test -- --runInBand --watch=false --bail=1",
     "java": "mvn test -q",
 }
 

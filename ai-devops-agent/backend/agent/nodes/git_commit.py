@@ -6,6 +6,10 @@ from agent.state import AgentState, Fix
 
 
 def git_commit(state: AgentState) -> AgentState:
+    if state.read_only:
+        state.push_attempted = False
+        return state
+
     new_fixes = [f for f in state.fixes if f.status == "FIXED"]
     if not new_fixes:
         state.push_attempted = False
@@ -67,6 +71,10 @@ def _build_primary_message(fixes: list[Fix]) -> str:
 def _push_to_remote(repo, branch_name: str, github_token: str = None) -> bool:
     repo_path = repo.working_dir
 
+    if not github_token:
+        print("[AI-AGENT] WARNING: No GITHUB_TOKEN provided — skipping push")
+        return False
+
     try:
         # Always build the push URL from scratch — ignore whatever origin has
         # Extract just the repo path (owner/repo) from any URL format
@@ -84,12 +92,8 @@ def _push_to_remote(repo, branch_name: str, github_token: str = None) -> bool:
 
         repo_path_str = match.group(1)  # e.g. "rahulkpr2510/ai-agent-test-repo"
 
-        if github_token:
-            push_url = f"https://{github_token}@github.com/{repo_path_str}.git"
-            print(f"[DEBUG] git_commit: push_url=https://***@github.com/{repo_path_str}.git")
-        else:
-            push_url = f"https://github.com/{repo_path_str}.git"
-            print("[DEBUG] git_commit: pushing without token")
+        push_url = f"https://{github_token}@github.com/{repo_path_str}.git"
+        print(f"[DEBUG] git_commit: push_url=https://***@github.com/{repo_path_str}.git")
 
         push_result = subprocess.run(
             ["git", "push", push_url, f"HEAD:{branch_name}", "--set-upstream", "--force"],

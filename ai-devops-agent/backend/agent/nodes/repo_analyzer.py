@@ -2,6 +2,8 @@ import tempfile
 import os
 import atexit
 import shutil
+import stat
+import time
 from git import Repo, GitCommandError, InvalidGitRepositoryError
 from agent.state import AgentState
 
@@ -141,9 +143,23 @@ def _analyze_structure(repo_dir: str) -> dict:
 
 def _cleanup_repo(repo_dir: str) -> None:
     """Removes the temp directory safely."""
-    try:
-        if os.path.exists(repo_dir):
-            shutil.rmtree(repo_dir)
+    def _on_rm_error(func, path, exc_info):
+        try:
+            os.chmod(path, stat.S_IWRITE)
+            func(path)
+        except Exception:
+            pass
+
+    if not os.path.exists(repo_dir):
+        return
+
+    for attempt in range(3):
+        try:
+            shutil.rmtree(repo_dir, onerror=_on_rm_error)
             print(f"[AI-AGENT] Cleaned up temp dir: {repo_dir}")
-    except Exception as e:
-        print(f"[AI-AGENT] WARNING: Could not clean up {repo_dir}: {e}")
+            return
+        except Exception as e:
+            if attempt < 2:
+                time.sleep(0.4)
+                continue
+            print(f"[AI-AGENT] WARNING: Could not clean up {repo_dir}: {e}")

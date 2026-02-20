@@ -33,3 +33,4 @@ Submit a GitHub repo URL and the agent:
 - Bug Detector
 - Fix Generator
 - Verifier
+git

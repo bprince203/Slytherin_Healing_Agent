@@ -1,18 +1,18 @@
+'use client';
+
 import Link from 'next/link';
-import { Bot, Clock3, LayoutDashboard, PlayCircle, ShieldCheck } from 'lucide-react';
+import { Bot, LayoutDashboard } from 'lucide-react';
+import { SignOutButton, UserButton } from '@clerk/nextjs';
 
-const links = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/history', label: 'History', icon: Clock3 },
-  { href: '/run/run_1002', label: 'Live Run', icon: PlayCircle },
-  { href: '/repo/repo_001', label: 'Repo', icon: ShieldCheck },
-];
+export function AppNavbar() {
+  const links = [
+    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  ];
 
-export function Navbar() {
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
       <nav className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-        <Link href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-foreground">
+        <Link href="/dashboard" className="inline-flex items-center gap-2 text-sm font-semibold text-foreground">
           <Bot className="h-5 w-5 text-info" />
           AI DevOps Copilot
         </Link>
@@ -30,6 +30,12 @@ export function Navbar() {
               </Link>
             );
           })}
+          <SignOutButton>
+            <button className="rounded-lg border border-border px-2 py-1 text-xs text-foreground hover:bg-white/5 sm:px-3 sm:text-sm">
+              Logout
+            </button>
+          </SignOutButton>
+          <UserButton afterSignOutUrl="/" />
         </div>
       </nav>
     </header>

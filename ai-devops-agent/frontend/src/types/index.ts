@@ -59,3 +59,17 @@ export interface RepoInfo {
   language: string;
   openIssues: number;
 }
+
+export interface RunSummary {
+  repositoryUrl: string;
+  teamName: string;
+  teamLeaderName: string;
+  branchName: string;
+  totalFailuresDetected: number;
+  totalFixesApplied: number;
+  finalStatus: 'PASSED' | 'FAILED' | 'RUNNING';
+  startedAtIso: string;
+  finishedAtIso: string;
+  totalTimeTaken: string;
+  mode: 'run-agent' | 'analyze-repository';
+}

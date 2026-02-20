@@ -78,6 +78,7 @@ class AgentState(BaseModel):
 
     # --- Optional input ---
     github_token: Optional[str] = None
+    read_only: bool = False
 
     # --- Repo analysis outputs (repo_analyzer) ---
     repo_path: Optional[str] = None
@@ -100,6 +101,7 @@ class AgentState(BaseModel):
     raw_test_output: Optional[str] = None
     push_attempted: bool = False
     deps_installed: bool = False        # ← ADDED: prevents reinstalling on every iteration
+    lint_checked_once: bool = False
 
     # --- Core agent outputs ---
     failures: List[Failure] = Field(default_factory=list)

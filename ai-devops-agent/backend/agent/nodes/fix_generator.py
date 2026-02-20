@@ -13,8 +13,14 @@ def fix_generator(state: AgentState) -> AgentState:
     new_fixes.extend(pytest_fixes)
 
     # Then process flake8/linting failures
-    for failure in state.failures:
-        clean_file = failure.file.lstrip("./").lstrip("/")
+    # Sort by file and descending line number so edits do not shift upcoming target lines.
+    ordered_failures = sorted(
+        state.failures,
+        key=lambda failure: (failure.file.replace("\\", "/"), -failure.line),
+    )
+
+    for failure in ordered_failures:
+        clean_file = failure.file.replace("\\", "/").lstrip("./").lstrip("/")
         file_path = os.path.join(state.repo_path, clean_file)
 
         if not os.path.exists(file_path):
@@ -213,6 +219,7 @@ def _find_function_in_repo(repo_path: str, func_name: str) -> tuple[str, int]:
                 for i, line in enumerate(file_lines):
                     if re.match(rf'^\s*def\s+{func_name}\s*\(', line):
                         rel = os.path.relpath(fpath, repo_path)
+                        rel = rel.replace("\\", "/")
                         return rel, i + 1
             except Exception:
                 continue

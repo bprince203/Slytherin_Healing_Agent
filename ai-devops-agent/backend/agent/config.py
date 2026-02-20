@@ -73,7 +73,7 @@ def validate_config() -> None:
     errors = []
 
     if not GITHUB_TOKEN:
-        errors.append("GITHUB_TOKEN is required (for cloning and pushing to GitHub)")
+        print("[AI-AGENT] WARNING: GITHUB_TOKEN not set — write mode (push/PR) will be unavailable")
 
     if LLM_PROVIDER == "openai" and not OPENAI_API_KEY:
         errors.append("OPENAI_API_KEY is required when LLM_PROVIDER=openai")
