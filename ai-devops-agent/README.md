@@ -34,20 +34,14 @@ The AI acts like an automated DevOps engineer.
 - Displays job timeline and fix results
 - Shows pass/fail progress and final status
 
-### Backend (Express.js)
+### Backend (FastAPI + Python Agent)
 - Clones repository
-- Runs tests in Docker
-- Calls AI engine
-- Coordinates retries until pass/fail completion
-- Pushes fixes to GitHub branch
+- Detects language and runs tests/lint
+- Classifies failures and generates fixes
+- Applies patches, reruns CI loop, and finalizes status
+- In write mode, creates branch/commit/push and raises PR
 
-### AI Engine (LangChain + LangGraph, Python)
-Multi-agent workflow with controlled execution and retry loops:
-- Repo Analyzer
-- Test Runner
-- Bug Detector
-- Fix Generator
-- Verifier
+The agent workflow (LangGraph-style node pipeline) is integrated directly in backend under `backend/agent/`.
 
 ### Docker Sandbox
 - Runs untrusted code safely
@@ -76,5 +70,5 @@ We are building an AI-powered DevOps Copilot that automatically fixes broken Git
 
 ## Current Repo Stack
 - Frontend: Next.js
-- Backend: Express.js (Node.js)
-- AI Engine: Python with LangChain + LangGraph
+- Backend API: FastAPI (Python)
+- Agent Runtime: Python workflow in `backend/agent`
