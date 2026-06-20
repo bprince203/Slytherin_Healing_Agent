@@ -239,13 +239,13 @@ def _validate_write_permission_or_raise(repo_url: str, github_token: str) -> Non
     except Exception:
         raise HTTPException(
             status_code=400,
-            detail="Unable to verify repository permissions. Check network and token validity.",
+            detail="Unable to verify repository permissions. Check network and GitHub connection validity.",
         )
 
     if response.status_code == 404:
         raise HTTPException(
             status_code=403,
-            detail="Repository not accessible with this token. You need collaborator/member access for write operations.",
+            detail="Repository not accessible with the connected GitHub account. You need collaborator/member access for write operations.",
         )
 
     if not response.ok:
@@ -282,7 +282,7 @@ def _validate_mode_auth_or_raise(mode: str, authorize_write: bool, repo_url: str
     if not github_token:
         raise HTTPException(
             status_code=400,
-            detail="GitHub token is required for write mode (run-agent). Provide it in the form or backend .env GITHUB_TOKEN. Use analyze-repository for read-only mode.",
+            detail="GitHub authorization is required for write mode (run-agent). Connect GitHub and use analyze-repository for read-only mode if needed.",
         )
 
     _validate_write_permission_or_raise(repo_url, github_token)

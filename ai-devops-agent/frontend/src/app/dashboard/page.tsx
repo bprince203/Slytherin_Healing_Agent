@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { RepoForm } from '@/components/RepoForm';
-import { useUser } from '@clerk/nextjs';
+import { useClerk, useUser } from '@clerk/nextjs';
 import { CheckCircle2 } from 'lucide-react';
 
 type GithubRepo = {
@@ -13,6 +13,7 @@ type GithubRepo = {
 };
 
 export default function DashboardPage() {
+  const clerk = useClerk();
   const { user } = useUser();
   const [userRepos, setUserRepos] = useState<GithubRepo[]>([]);
   const [loadingRepos, setLoadingRepos] = useState(false);
@@ -41,9 +42,18 @@ export default function DashboardPage() {
               <span>GitHub Connected</span>
             </div>
           ) : (
-            <p className="text-sm text-muted">
-              GitHub is not connected yet. Connect it in your Clerk account settings to enable repo import and PR actions.
-            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-sm text-muted">
+                GitHub is not connected yet. Open your profile to connect it and unlock repo import and write mode.
+              </p>
+              <button
+                type="button"
+                onClick={() => clerk.openUserProfile({})}
+                className="rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground hover:bg-white/5"
+              >
+                Connect GitHub
+              </button>
+            </div>
           )}
         </div>
         <RepoForm userRepos={userRepos} loadingRepos={loadingRepos} />

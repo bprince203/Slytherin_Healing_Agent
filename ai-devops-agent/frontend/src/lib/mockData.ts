@@ -129,5 +129,5 @@ export const defaultRunSummary: RunSummary = {
   startedAtIso: '2026-02-19T08:29:00.000Z',
   finishedAtIso: '2026-02-19T08:33:12.000Z',
   totalTimeTaken: '4m 12s',
-  mode: 'run-agent',
+  mode: 'analyze-repository',
 };

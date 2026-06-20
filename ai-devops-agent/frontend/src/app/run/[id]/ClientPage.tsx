@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import confetti from 'canvas-confetti';
 import { LoaderCircle, Share2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useClerk, useUser } from '@clerk/nextjs';
 import { toast } from 'sonner';
 
 import { FixSuggestionCard } from '@/components/FixSuggestionCard';
@@ -13,7 +14,6 @@ import { PipelineTimeline } from '@/components/PipelineTimeline';
 import { RunSummaryCard } from '@/components/RunSummaryCard';
 import { StepCard } from '@/components/StepCard';
 import { defaultRunSummary } from '@/lib/mockData';
-import { loadStoredAccessKeys } from '@/lib/accessKeys';
 import { saveLastRunId } from '@/lib/runSession';
 import type { FixSuggestion, LogLine, PipelineStep, RunSummary, StepStatus } from '@/types';
 
@@ -111,6 +111,8 @@ function buildFixes(data: BackendRunResponse): FixSuggestion[] {
 
 export default function ClientPage({ runId }: ClientPageProps) {
   const router = useRouter();
+  const clerk = useClerk();
+  const { user } = useUser();
   const [loading, setLoading] = useState(true);
   const [runData, setRunData] = useState<BackendRunResponse | null>(null);
   const [isRestarting, setIsRestarting] = useState(false);
@@ -156,7 +158,25 @@ export default function ClientPage({ runId }: ClientPageProps) {
   const isRunning = (runData?.final_status || '').toUpperCase() === 'RUNNING';
   const allPassed = summary.finalStatus === 'PASSED';
   const isAnalyzeMode = (runData?.mode || '').toLowerCase() === 'analyze-repository';
-  const storedAccessKeys = loadStoredAccessKeys();
+  const isGithubConnected = Boolean(user?.externalAccounts?.some((account) => account.provider === 'github'));
+
+  const openGithubConnection = () => {
+    clerk.openUserProfile({});
+  };
+
+  const fetchGithubToken = async () => {
+    const response = await fetch('/api/agent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!response.ok) {
+      throw new Error('GitHub connection is not ready');
+    }
+
+    const data = (await response.json()) as { githubToken?: string | null };
+    return (data.githubToken || '').trim();
+  };
 
   const runAgentFromAnalysis = async () => {
     if (!runData?.repository_url) {
@@ -164,18 +184,17 @@ export default function ClientPage({ runId }: ClientPageProps) {
       return;
     }
 
-    const aiKey = storedAccessKeys.aiApiKey.trim();
-    if (!aiKey) {
-      setSupportBanner(
-        'We are running on empty right now. Open the Access Vault on the dashboard, paste your Gemini or OpenAI key, save it, and come back to light up the agent.'
-      );
-      toast.error('Run Agent needs a saved AI API key for write mode.');
+    if (!isGithubConnected) {
+      setSupportBanner('GitHub is not connected yet. Open your profile, connect GitHub, and then try write mode again.');
+      openGithubConnection();
+      toast.error('Connect GitHub to enable write mode.');
       return;
     }
 
     const apiBase = process.env.NEXT_PUBLIC_AI_ENGINE_API_URL || 'http://localhost:8000';
     setIsPromotingToRunAgent(true);
     try {
+      const githubToken = await fetchGithubToken();
       const response = await fetch(`${apiBase}/api/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -183,7 +202,7 @@ export default function ClientPage({ runId }: ClientPageProps) {
           repository_url: runData.repository_url,
           mode: 'run-agent',
           authorize_write: true,
-          gemini_api_key: aiKey,
+          github_token: githubToken,
         }),
       });
 
@@ -211,11 +230,13 @@ export default function ClientPage({ runId }: ClientPageProps) {
         lowerMessage.includes('token') ||
         lowerMessage.includes('quota') ||
         lowerMessage.includes('rate limit') ||
-        lowerMessage.includes('api key');
+        lowerMessage.includes('authorization') ||
+        lowerMessage.includes('permission') ||
+        lowerMessage.includes('access');
 
       if (isAccessOrQuotaIssue) {
         setSupportBanner(
-          'The engine is a little hungry. Add your Gemini or OpenAI key in the Access Vault, then the run can keep dancing.'
+          'GitHub write access is not ready yet. Open your profile, connect the account with repo access, and try again.'
         );
       }
 
@@ -234,10 +255,10 @@ export default function ClientPage({ runId }: ClientPageProps) {
     const apiBase = process.env.NEXT_PUBLIC_AI_ENGINE_API_URL || 'http://localhost:8000';
     const currentMode = (runData.mode || 'analyze-repository').toString();
     const restartMode = currentMode === 'run-agent' ? 'run-agent' : 'analyze-repository';
-    const aiKey = storedAccessKeys.aiApiKey.trim();
 
     setIsRestarting(true);
     try {
+      const githubToken = restartMode === 'run-agent' ? await fetchGithubToken() : undefined;
       const response = await fetch(`${apiBase}/api/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -245,7 +266,7 @@ export default function ClientPage({ runId }: ClientPageProps) {
           repository_url: runData.repository_url,
           mode: restartMode,
           authorize_write: restartMode === 'run-agent',
-          gemini_api_key: restartMode === 'run-agent' ? aiKey : undefined,
+          github_token: githubToken,
         }),
       });
 
@@ -269,13 +290,13 @@ export default function ClientPage({ runId }: ClientPageProps) {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       const lowerMessage = message.toLowerCase();
-      const requiresWriteToken = lowerMessage.includes('token') || lowerMessage.includes('write mode');
+      const requiresWriteAccess = lowerMessage.includes('token') || lowerMessage.includes('write mode') || lowerMessage.includes('permission') || lowerMessage.includes('access');
 
-      if (requiresWriteToken) {
+      if (requiresWriteAccess) {
         setSupportBanner(
-          'We are running low on AI fuel. Visit the dashboard Access Vault, save your Gemini or OpenAI key, and then try Run Agent again.'
+          'GitHub write access is not ready yet. Open your profile, connect the account with repo access, and then try again.'
         );
-        toast.error('Restart in write mode needs a saved AI API key.');
+        toast.error('Restart in write mode needs GitHub authorization.');
       } else {
         toast.error(`Unable to restart run: ${message}`);
       }
@@ -295,7 +316,7 @@ export default function ClientPage({ runId }: ClientPageProps) {
     <div className="space-y-6">
       {supportBanner ? (
         <section className="rounded-xl border border-amber-400/50 bg-gradient-to-r from-amber-400/15 via-orange-400/10 to-pink-400/15 p-4 text-amber-50 shadow-lg">
-          <h3 className="text-base font-semibold text-amber-100">Token pocket is empty</h3>
+          <h3 className="text-base font-semibold text-amber-100">Write mode needs attention</h3>
           <p className="mt-1 text-sm leading-6 text-amber-50/90">{supportBanner}</p>
         </section>
       ) : null}

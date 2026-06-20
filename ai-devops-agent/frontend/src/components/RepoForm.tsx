@@ -1,15 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { ChevronDown, Github, KeyRound, LoaderCircle, PlayCircle, ScanSearch, Sparkles } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronDown, Github, LoaderCircle, PlayCircle, ScanSearch, Sparkles } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useAuth, useUser } from '@clerk/nextjs';
+import { useAuth, useClerk, useUser } from '@clerk/nextjs';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { exampleRepos } from '@/lib/mockData';
 import { saveLastRunId } from '@/lib/runSession';
-import { clearStoredAccessKeys, loadStoredAccessKeys, saveStoredAccessKeys } from '@/lib/accessKeys';
 
 type GithubRepo = {
   full_name: string;
@@ -26,48 +25,62 @@ type RepoFormProps = {
 export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps) {
   const router = useRouter();
   const { isSignedIn } = useAuth();
+  const clerk = useClerk();
   const { user } = useUser();
   const [repo, setRepo] = useState<string>('');
   const [authorizeWrite, setAuthorizeWrite] = useState<boolean>(false);
   const [confirmRepoPermission, setConfirmRepoPermission] = useState<boolean>(false);
   const [runningMode, setRunningMode] = useState<'run-agent' | 'analyze-repository' | null>(null);
   const [showRepoDropdown, setShowRepoDropdown] = useState(false);
-  const [aiApiKey, setAiApiKey] = useState('');
   const [supportBanner, setSupportBanner] = useState<string | null>(null);
-  const [saveNotice, setSaveNotice] = useState<string | null>(null);
 
   const trimmedRepo = repo.trim();
-  const trimmedAiApiKey = aiApiKey.trim();
   const isGithubConnected = Boolean(user?.externalAccounts?.some((account) => account.provider === 'github'));
 
   const isValidGithubRepo = /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/?$/i.test(trimmedRepo);
   const canSubmit = isValidGithubRepo;
 
-  useEffect(() => {
-    const stored = loadStoredAccessKeys();
-    setAiApiKey(stored.aiApiKey);
-  }, []);
-
-  const persistAccessKeys = () => {
-    saveStoredAccessKeys({ githubToken: '', aiApiKey: trimmedAiApiKey });
-    setSaveNotice('Gemini/OpenAI key saved locally in this browser.');
-    setSupportBanner(null);
-  };
-
-  const clearAccessKeys = () => {
-    clearStoredAccessKeys();
-    setAiApiKey('');
-    setSaveNotice('Saved AI key cleared.');
-  };
-
   const raiseSupportBanner = (message: string) => {
     setSupportBanner(message);
-    setSaveNotice(null);
   };
 
-  const beginWriteMode = () => {
-    setAuthorizeWrite(true);
-    setConfirmRepoPermission(true);
+  const openGithubConnection = () => {
+    clerk.openUserProfile({});
+  };
+
+  const fetchGithubToken = async () => {
+    const response = await fetch('/api/agent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!response.ok) {
+      throw new Error('GitHub connection is not ready');
+    }
+
+    const data = (await response.json()) as { githubToken?: string | null };
+    return (data.githubToken || '').trim();
+  };
+
+  const onGithubCheckboxChange = () => {
+    if (!isGithubConnected) {
+      raiseSupportBanner('GitHub is not connected yet. Open your profile, connect GitHub, and the box will check itself.');
+      openGithubConnection();
+    }
+  };
+
+  const onWriteCheckboxChange = () => {
+    if (!isGithubConnected) {
+      raiseSupportBanner('Connect GitHub first, then approve write mode for this repository.');
+      openGithubConnection();
+      setAuthorizeWrite(false);
+      setConfirmRepoPermission(false);
+      return;
+    }
+
+    setAuthorizeWrite((value) => !value);
+    setConfirmRepoPermission((value) => !value);
+    setSupportBanner(null);
   };
 
   const handleRun = async (mode: 'run-agent' | 'analyze-repository') => {
@@ -86,20 +99,20 @@ export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps
     }
 
     if (mode === 'run-agent') {
-      beginWriteMode();
       if (!isGithubConnected) {
         raiseSupportBanner(
-          'GitHub is not connected yet. Open your Clerk account settings, connect GitHub, then come back to light up write mode.'
+          'GitHub is not connected yet. Open your profile, connect GitHub, and then try write mode again.'
         );
-        toast.error('Run Agent needs GitHub connected before write mode can start.');
+        openGithubConnection();
+        toast.error('Connect GitHub to enable write mode.');
         return;
       }
 
-      if (!trimmedAiApiKey) {
+      if (!authorizeWrite || !confirmRepoPermission) {
         raiseSupportBanner(
-          'We are running on empty right now. Add your Gemini or OpenAI key below so the agent can think before it writes.'
+          'Check both write-mode boxes to continue.'
         );
-        toast.error('Run Agent needs an AI API key to proceed.');
+        toast.error('Write mode needs both confirmations.');
         return;
       }
     }
@@ -107,6 +120,7 @@ export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps
     setRunningMode(mode);
 
     try {
+      const githubToken = mode === 'run-agent' ? await fetchGithubToken() : undefined;
       const apiBase = process.env.NEXT_PUBLIC_AI_ENGINE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBase}/api/run`, {
         method: 'POST',
@@ -115,8 +129,7 @@ export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps
           repository_url: trimmedRepo,
           mode,
           authorize_write: mode === 'run-agent',
-          github_token: undefined,
-          gemini_api_key: mode === 'run-agent' ? trimmedAiApiKey : undefined,
+          github_token: githubToken,
         }),
       });
 
@@ -155,29 +168,16 @@ export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps
         (lowerMessage.includes('write authorization') ||
           lowerMessage.includes('write permission') ||
           lowerMessage.includes('collaborator') ||
-          lowerMessage.includes('token'));
-
-      const isApiKeyLimitError =
-        lowerMessage.includes('api key') ||
-        lowerMessage.includes('quota') ||
-        lowerMessage.includes('rate limit') ||
-        lowerMessage.includes('insufficient') ||
-        lowerMessage.includes('billing') ||
-        lowerMessage.includes('token expired');
+          lowerMessage.includes('authorization') ||
+          lowerMessage.includes('access'));
 
       if (isWriteAccessError) {
+        setAuthorizeWrite(false);
+        setConfirmRepoPermission(false);
         raiseSupportBanner(
-          'The engine wants GitHub connected before it can write branches. Open Clerk settings, connect GitHub, and then try again.'
+          'GitHub write access is not ready yet. Open your profile, connect the account with repo access, and check both boxes again.'
         );
         toast.error(`Run Agent blocked: ${message}`);
-        return;
-      }
-
-      if (isApiKeyLimitError) {
-        raiseSupportBanner(
-          'Our tiny AI pocket is empty right now. Add your Gemini or OpenAI key in the Access Vault and the magic can keep going.'
-        );
-        toast.error('AI access needs a valid API key or quota.');
         return;
       }
 
@@ -202,7 +202,7 @@ export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps
                 <Sparkles className="h-5 w-5" />
               </div>
               <div className="space-y-1">
-                <h3 className="text-base font-semibold text-amber-100">Tiny token tummy rumble</h3>
+                <h3 className="text-base font-semibold text-amber-100">GitHub connection needed</h3>
                 <p className="text-sm leading-6 text-amber-50/90">{supportBanner}</p>
               </div>
             </div>
@@ -282,71 +282,36 @@ export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps
           </Button>
         </div>
 
-        <label className="inline-flex items-start gap-2 rounded-lg border border-border bg-black/10 px-3 py-2 text-xs text-muted">
+        <button
+          type="button"
+          onClick={onGithubCheckboxChange}
+          className="inline-flex items-start gap-2 rounded-lg border border-border bg-black/10 px-3 py-2 text-left text-xs text-muted hover:bg-black/20"
+        >
           <input
             type="checkbox"
-            checked={authorizeWrite}
-            onChange={(e) => setAuthorizeWrite(e.target.checked)}
+            checked={isGithubConnected}
+            readOnly
             className="mt-0.5"
           />
-          <span>I authorize write operations (branch/push/PR) for this run.</span>
-        </label>
-        <label className="inline-flex items-start gap-2 rounded-lg border border-border bg-black/10 px-3 py-2 text-xs text-muted">
+          <span>GitHub connected for write mode</span>
+        </button>
+        <button
+          type="button"
+          onClick={onWriteCheckboxChange}
+          className="inline-flex items-start gap-2 rounded-lg border border-border bg-black/10 px-3 py-2 text-left text-xs text-muted hover:bg-black/20"
+        >
           <input
             type="checkbox"
-            checked={confirmRepoPermission}
-            onChange={(e) => setConfirmRepoPermission(e.target.checked)}
+            checked={authorizeWrite && confirmRepoPermission}
+            readOnly
             className="mt-0.5"
           />
-          <span>I confirm this user has collaborator or write access to the repository.</span>
-        </label>
+          <span>I allow this run to write to the selected repository.</span>
+        </button>
 
-        <p className="text-xs text-muted">Run Agent auto-enables the write-confirmation flags. Save your Gemini or OpenAI key below if you want the AI to keep helping.</p>
-
-        <section className="rounded-xl border border-border bg-black/10 p-4">
-          <div className="mb-3 flex items-start justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">Access Vault</h3>
-              <p className="mt-1 text-xs leading-5 text-muted">
-                Save your Gemini or OpenAI key here. GitHub write access comes from your Clerk connection, not a PAT box.
-              </p>
-            </div>
-            <div className="rounded-full border border-border bg-black/20 px-2 py-1 text-[11px] text-muted">
-              Public platform
-            </div>
-          </div>
-
-          <div className="grid gap-3">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-foreground">Gemini / OpenAI API key</label>
-              <input
-                value={aiApiKey}
-                onChange={(e) => setAiApiKey(e.target.value)}
-                className="w-full rounded-lg border border-border bg-black/20 px-3 py-2 text-sm text-foreground outline-none ring-info/50 placeholder:text-muted focus:ring-2"
-                placeholder="AIza... or sk-..."
-              />
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={persistAccessKeys}
-                className="inline-flex items-center gap-2 rounded-lg border border-border bg-emerald-500/20 px-3 py-2 text-xs font-medium text-emerald-100 hover:bg-emerald-500/30"
-              >
-                <KeyRound className="h-3.5 w-3.5" />
-                Save AI key
-              </button>
-              <button
-                type="button"
-                onClick={clearAccessKeys}
-                className="inline-flex items-center gap-2 rounded-lg border border-border bg-black/20 px-3 py-2 text-xs font-medium text-muted hover:text-foreground"
-              >
-                Clear saved keys
-              </button>
-            </div>
-            {saveNotice ? <p className="text-xs text-emerald-300">{saveNotice}</p> : null}
-          </div>
-        </section>
+        <p className="text-xs text-muted">
+          Run Agent will open your GitHub profile if connection is missing, then use that connected account for write mode.
+        </p>
 
         <p className="text-xs text-muted">Enter a repository URL to run the agent or analyze the repo in read-only mode.</p>
       </div>
