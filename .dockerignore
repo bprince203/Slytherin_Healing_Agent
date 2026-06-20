@@ -1,0 +1,15 @@
+.git
+.github
+.venv
+ai-devops-agent/frontend/node_modules
+ai-devops-agent/frontend/.next
+ai-devops-agent/backend/.venv
+ai-devops-agent/backend/myenv
+ai-devops-agent/backend/__pycache__
+ai-devops-agent/backend/.pytest_cache
+**/*.pyc
+**/__pycache__
+*.log
+.env
+ai-devops-agent/backend/.env
+ai-devops-agent/frontend/.env
