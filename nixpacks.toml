@@ -1,0 +1,15 @@
+[variables]
+PYTHONUNBUFFERED = "1"
+PIP_DISABLE_PIP_VERSION_CHECK = "1"
+
+[phases.setup]
+nixPkgs = ["python313", "git"]
+
+[phases.install]
+cmds = [
+  "python -m pip install --upgrade pip",
+  "python -m pip install -r ai-devops-agent/backend/requirements.txt"
+]
+
+[start]
+cmd = "cd ai-devops-agent/backend && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"
