@@ -25,10 +25,6 @@ export function RunSummaryCard({ summary }: RunSummaryCardProps) {
           <p className="mt-1 text-sm text-foreground">{summary.mode === 'run-agent' ? 'Write mode' : 'Analyze only'}</p>
         </div>
         <div>
-          <p className="text-xs uppercase tracking-wide text-muted">Branch name created</p>
-          <p className="mt-1 text-sm font-medium text-info">{summary.branchName}</p>
-        </div>
-        <div>
           <p className="text-xs uppercase tracking-wide text-muted">Failures detected</p>
           <p className="mt-1 text-sm text-foreground">{summary.totalFailuresDetected}</p>
         </div>

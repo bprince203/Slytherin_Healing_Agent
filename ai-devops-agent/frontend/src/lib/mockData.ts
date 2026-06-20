@@ -122,7 +122,7 @@ export const defaultRunSummary: RunSummary = {
   repositoryUrl: 'https://github.com/acme/inventory-api',
   teamName: 'Public Platform',
   teamLeaderName: 'Anonymous Operator',
-  branchName: 'PLATFORM_TEAM_JANE_DOE_AI_Fix',
+  branchName: '',
   totalFailuresDetected: 2,
   totalFixesApplied: 2,
   finalStatus: 'PASSED',

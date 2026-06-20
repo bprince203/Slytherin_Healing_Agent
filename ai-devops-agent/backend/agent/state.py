@@ -2,6 +2,7 @@ from typing import List, Optional, Literal, Any
 from pydantic import BaseModel, Field, model_validator
 from datetime import datetime, timezone
 from agent.config import DEFAULT_MAX_ITERATIONS, BRANCH_SUFFIX
+import re
 
 
 # ---------------------------------------------------------------------------
@@ -128,14 +129,17 @@ class AgentState(BaseModel):
     @model_validator(mode="after")
     def generate_branch_name(self) -> "AgentState":
         """
-        Auto-generates branch name from team + leader names.
-        Format: TEAMNAME_LEADERNAME_AI_Fix (exact PS requirement)
-        e.g. Code Warriors + John Doe → CODE_WARRIORS_JOHN_DOE_AI_Fix
+        Auto-generates branch name from the repository slug.
+        Format: OWNER_REPO_AI_Fix
         """
         if not self.branch_name:
-            team = self.team_name.upper().replace(" ", "_")
-            leader = self.team_leader.upper().replace(" ", "_")
-            self.branch_name = f"{team}_{leader}_{BRANCH_SUFFIX}"
+            match = re.search(r"github\.com[/:]([^/]+)/([^/\s.]+)", self.repo_url)
+            if match:
+                owner = match.group(1).upper().replace("-", "_").replace(" ", "_")
+                repo = match.group(2).replace(".git", "").upper().replace("-", "_").replace(" ", "_")
+                self.branch_name = f"{owner}_{repo}_{BRANCH_SUFFIX}"
+            else:
+                self.branch_name = f"PUBLIC_PLATFORM_{BRANCH_SUFFIX}"
         return self
 
     # ---------------------------------------------------------------------------

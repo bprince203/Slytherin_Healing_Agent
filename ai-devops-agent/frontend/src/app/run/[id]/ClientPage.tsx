@@ -164,12 +164,12 @@ export default function ClientPage({ runId }: ClientPageProps) {
       return;
     }
 
-    const token = storedAccessKeys.githubToken.trim();
-    if (!token) {
+    const aiKey = storedAccessKeys.aiApiKey.trim();
+    if (!aiKey) {
       setSupportBanner(
-        'We are running on empty right now. Open the Access Vault on the dashboard, paste a GitHub PAT, save it, and come back to light up write mode.'
+        'We are running on empty right now. Open the Access Vault on the dashboard, paste your Gemini or OpenAI key, save it, and come back to light up the agent.'
       );
-      toast.error('Run Agent needs a saved GitHub PAT for write mode.');
+      toast.error('Run Agent needs a saved AI API key for write mode.');
       return;
     }
 
@@ -183,7 +183,7 @@ export default function ClientPage({ runId }: ClientPageProps) {
           repository_url: runData.repository_url,
           mode: 'run-agent',
           authorize_write: true,
-          github_token: token,
+          gemini_api_key: aiKey,
         }),
       });
 
@@ -215,7 +215,7 @@ export default function ClientPage({ runId }: ClientPageProps) {
 
       if (isAccessOrQuotaIssue) {
         setSupportBanner(
-          'The engine is a little hungry. Add a GitHub PAT or an API key in the Access Vault, then the run can keep dancing.'
+          'The engine is a little hungry. Add your Gemini or OpenAI key in the Access Vault, then the run can keep dancing.'
         );
       }
 
@@ -234,7 +234,7 @@ export default function ClientPage({ runId }: ClientPageProps) {
     const apiBase = process.env.NEXT_PUBLIC_AI_ENGINE_API_URL || 'http://localhost:8000';
     const currentMode = (runData.mode || 'analyze-repository').toString();
     const restartMode = currentMode === 'run-agent' ? 'run-agent' : 'analyze-repository';
-    const token = storedAccessKeys.githubToken.trim();
+    const aiKey = storedAccessKeys.aiApiKey.trim();
 
     setIsRestarting(true);
     try {
@@ -245,7 +245,7 @@ export default function ClientPage({ runId }: ClientPageProps) {
           repository_url: runData.repository_url,
           mode: restartMode,
           authorize_write: restartMode === 'run-agent',
-          github_token: restartMode === 'run-agent' ? token : undefined,
+          gemini_api_key: restartMode === 'run-agent' ? aiKey : undefined,
         }),
       });
 
@@ -273,9 +273,9 @@ export default function ClientPage({ runId }: ClientPageProps) {
 
       if (requiresWriteToken) {
         setSupportBanner(
-          'We are running low on GitHub fuel. Visit the dashboard Access Vault, save a PAT, and then try Run Agent again.'
+          'We are running low on AI fuel. Visit the dashboard Access Vault, save your Gemini or OpenAI key, and then try Run Agent again.'
         );
-        toast.error('Restart in write mode needs a saved GitHub PAT.');
+        toast.error('Restart in write mode needs a saved AI API key.');
       } else {
         toast.error(`Unable to restart run: ${message}`);
       }

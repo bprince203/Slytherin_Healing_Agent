@@ -62,9 +62,7 @@ def create_pull_request(state: AgentState) -> AgentState:
                 "title": f"[AI-AGENT] Auto-fix: {len(fixed)} issues fixed in 1 iteration",
                 "body": f"""## 🤖 AI-AGENT Auto-Fix PR
 
-**Team:** {state.team_name}
-**Leader:** {state.team_leader}
-**Branch:** `{state.branch_name}`
+**Repository:** {state.repo_url}
 **Final Status:** {state.final_status}
 **Iterations Used:** {state.iteration}/{state.max_iterations}
 **Score:** {state.score.final_score if state.score else 110}

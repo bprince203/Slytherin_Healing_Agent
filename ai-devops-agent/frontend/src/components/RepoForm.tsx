@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { ChevronDown, Github, KeyRound, LoaderCircle, PlayCircle, ScanSearch, Sparkles } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@clerk/nextjs';
+import { useAuth, useUser } from '@clerk/nextjs';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -26,40 +26,38 @@ type RepoFormProps = {
 export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps) {
   const router = useRouter();
   const { isSignedIn } = useAuth();
+  const { user } = useUser();
   const [repo, setRepo] = useState<string>('');
   const [authorizeWrite, setAuthorizeWrite] = useState<boolean>(false);
   const [confirmRepoPermission, setConfirmRepoPermission] = useState<boolean>(false);
   const [runningMode, setRunningMode] = useState<'run-agent' | 'analyze-repository' | null>(null);
   const [showRepoDropdown, setShowRepoDropdown] = useState(false);
-  const [githubToken, setGithubToken] = useState('');
   const [aiApiKey, setAiApiKey] = useState('');
   const [supportBanner, setSupportBanner] = useState<string | null>(null);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
 
   const trimmedRepo = repo.trim();
-  const trimmedGithubToken = githubToken.trim();
   const trimmedAiApiKey = aiApiKey.trim();
+  const isGithubConnected = Boolean(user?.externalAccounts?.some((account) => account.provider === 'github'));
 
   const isValidGithubRepo = /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/?$/i.test(trimmedRepo);
   const canSubmit = isValidGithubRepo;
 
   useEffect(() => {
     const stored = loadStoredAccessKeys();
-    setGithubToken(stored.githubToken);
     setAiApiKey(stored.aiApiKey);
   }, []);
 
   const persistAccessKeys = () => {
-    saveStoredAccessKeys({ githubToken: trimmedGithubToken, aiApiKey: trimmedAiApiKey });
-    setSaveNotice('Access keys saved locally in this browser.');
+    saveStoredAccessKeys({ githubToken: '', aiApiKey: trimmedAiApiKey });
+    setSaveNotice('Gemini/OpenAI key saved locally in this browser.');
     setSupportBanner(null);
   };
 
   const clearAccessKeys = () => {
     clearStoredAccessKeys();
-    setGithubToken('');
     setAiApiKey('');
-    setSaveNotice('Saved access keys cleared.');
+    setSaveNotice('Saved AI key cleared.');
   };
 
   const raiseSupportBanner = (message: string) => {
@@ -89,11 +87,19 @@ export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps
 
     if (mode === 'run-agent') {
       beginWriteMode();
-      if (!trimmedGithubToken) {
+      if (!isGithubConnected) {
         raiseSupportBanner(
-          'We are running on empty right now. Paste a GitHub PAT in the Access Vault below so Run Agent can push fixes and raise a PR.'
+          'GitHub is not connected yet. Open your Clerk account settings, connect GitHub, then come back to light up write mode.'
         );
-        toast.error('Run Agent needs a saved GitHub PAT for write mode.');
+        toast.error('Run Agent needs GitHub connected before write mode can start.');
+        return;
+      }
+
+      if (!trimmedAiApiKey) {
+        raiseSupportBanner(
+          'We are running on empty right now. Add your Gemini or OpenAI key below so the agent can think before it writes.'
+        );
+        toast.error('Run Agent needs an AI API key to proceed.');
         return;
       }
     }
@@ -109,7 +115,8 @@ export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps
           repository_url: trimmedRepo,
           mode,
           authorize_write: mode === 'run-agent',
-          github_token: mode === 'run-agent' ? trimmedGithubToken : undefined,
+          github_token: undefined,
+          gemini_api_key: mode === 'run-agent' ? trimmedAiApiKey : undefined,
         }),
       });
 
@@ -160,7 +167,7 @@ export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps
 
       if (isWriteAccessError) {
         raiseSupportBanner(
-          'The engine is asking for a write key to put the fix branch on GitHub. Drop the PAT into the Access Vault, save it, and Run Agent again.'
+          'The engine wants GitHub connected before it can write branches. Open Clerk settings, connect GitHub, and then try again.'
         );
         toast.error(`Run Agent blocked: ${message}`);
         return;
@@ -294,14 +301,14 @@ export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps
           <span>I confirm this user has collaborator or write access to the repository.</span>
         </label>
 
-        <p className="text-xs text-muted">Run Agent auto-enables the write-confirmation flags. Save a GitHub PAT below if you want fix branches and PRs.</p>
+        <p className="text-xs text-muted">Run Agent auto-enables the write-confirmation flags. Save your Gemini or OpenAI key below if you want the AI to keep helping.</p>
 
         <section className="rounded-xl border border-border bg-black/10 p-4">
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold text-foreground">Access Vault</h3>
               <p className="mt-1 text-xs leading-5 text-muted">
-                Paste your GitHub PAT for write mode and optionally store an AI API key for future LLM-powered runs.
+                Save your Gemini or OpenAI key here. GitHub write access comes from your Clerk connection, not a PAT box.
               </p>
             </div>
             <div className="rounded-full border border-border bg-black/20 px-2 py-1 text-[11px] text-muted">
@@ -310,15 +317,6 @@ export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps
           </div>
 
           <div className="grid gap-3">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-foreground">GitHub PAT for write mode</label>
-              <input
-                value={githubToken}
-                onChange={(e) => setGithubToken(e.target.value)}
-                className="w-full rounded-lg border border-border bg-black/20 px-3 py-2 text-sm text-foreground outline-none ring-info/50 placeholder:text-muted focus:ring-2"
-                placeholder="ghp_..."
-              />
-            </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-foreground">Gemini / OpenAI API key</label>
               <input
@@ -336,7 +334,7 @@ export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps
                 className="inline-flex items-center gap-2 rounded-lg border border-border bg-emerald-500/20 px-3 py-2 text-xs font-medium text-emerald-100 hover:bg-emerald-500/30"
               >
                 <KeyRound className="h-3.5 w-3.5" />
-                Save access keys
+                Save AI key
               </button>
               <button
                 type="button"
