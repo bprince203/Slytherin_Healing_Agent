@@ -1,14 +1,25 @@
 // app/api/agent/route.ts
-import { auth, clerkClient } from "@clerk/nextjs/server";
+import { auth, clerkClient } from '@clerk/nextjs/server';
+import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
-  const { userId } = auth();
-  
-  const [tokenResponse] = await clerkClient.users.getUserOauthAccessToken(
-    userId!,
-    "github"
-  );
-  
-  const githubToken = tokenResponse.token; // Use this with Octokit in LangChain
-  // Pass githubToken to your LangChain GitHub tool
+  const { userId } = await auth();
+
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
+    const client = await clerkClient();
+    const tokenResponse = await client.users.getUserOauthAccessToken(
+      userId,
+      'oauth_github'
+    );
+
+    const githubToken = tokenResponse.data?.[0]?.token ?? null;
+
+    return NextResponse.json({ githubToken });
+  } catch {
+    return NextResponse.json({ githubToken: null }, { status: 500 });
+  }
 }

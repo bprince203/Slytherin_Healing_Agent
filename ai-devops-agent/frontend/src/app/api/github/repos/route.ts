@@ -10,12 +10,12 @@ export async function GET() {
 
   try {
     const client = await clerkClient();
-    const [tokenResponse] = await client.users.getUserOauthAccessToken(
+    const tokenResponse = await client.users.getUserOauthAccessToken(
       userId,
       'oauth_github'
     );
 
-    if (!tokenResponse?.token) {
+    if (!tokenResponse.data?.[0]?.token) {
       return NextResponse.json({ repos: [] });
     }
 
@@ -23,7 +23,7 @@ export async function GET() {
       'https://api.github.com/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator',
       {
         headers: {
-          Authorization: `Bearer ${tokenResponse.token}`,
+          Authorization: `Bearer ${tokenResponse.data[0].token}`,
           Accept: 'application/vnd.github.v3+json',
         },
       }
