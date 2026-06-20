@@ -17,12 +17,12 @@ export function RunSummaryCard({ summary }: RunSummaryCardProps) {
           <p className="mt-1 break-all text-sm text-foreground">{summary.repositoryUrl}</p>
         </div>
         <div>
-          <p className="text-xs uppercase tracking-wide text-muted">Team name</p>
-          <p className="mt-1 text-sm text-foreground">{summary.teamName}</p>
+          <p className="text-xs uppercase tracking-wide text-muted">Platform</p>
+          <p className="mt-1 text-sm text-foreground">Public platform</p>
         </div>
         <div>
-          <p className="text-xs uppercase tracking-wide text-muted">Team leader</p>
-          <p className="mt-1 text-sm text-foreground">{summary.teamLeaderName}</p>
+          <p className="text-xs uppercase tracking-wide text-muted">Mode</p>
+          <p className="mt-1 text-sm text-foreground">{summary.mode === 'run-agent' ? 'Write mode' : 'Analyze only'}</p>
         </div>
         <div>
           <p className="text-xs uppercase tracking-wide text-muted">Branch name created</p>

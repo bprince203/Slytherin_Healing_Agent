@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Github, LoaderCircle, PlayCircle, ScanSearch, ChevronDown } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ChevronDown, Github, KeyRound, LoaderCircle, PlayCircle, ScanSearch, Sparkles } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@clerk/nextjs';
 import { toast } from 'sonner';
@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { exampleRepos } from '@/lib/mockData';
 import { saveLastRunId } from '@/lib/runSession';
+import { clearStoredAccessKeys, loadStoredAccessKeys, saveStoredAccessKeys } from '@/lib/accessKeys';
 
 type GithubRepo = {
   full_name: string;
@@ -26,23 +27,54 @@ export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps
   const router = useRouter();
   const { isSignedIn } = useAuth();
   const [repo, setRepo] = useState<string>('');
-  const [teamName, setTeamName] = useState<string>('');
-  const [teamLeaderName, setTeamLeaderName] = useState<string>('');
   const [authorizeWrite, setAuthorizeWrite] = useState<boolean>(false);
   const [confirmRepoPermission, setConfirmRepoPermission] = useState<boolean>(false);
   const [runningMode, setRunningMode] = useState<'run-agent' | 'analyze-repository' | null>(null);
   const [showRepoDropdown, setShowRepoDropdown] = useState(false);
+  const [githubToken, setGithubToken] = useState('');
+  const [aiApiKey, setAiApiKey] = useState('');
+  const [supportBanner, setSupportBanner] = useState<string | null>(null);
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
 
   const trimmedRepo = repo.trim();
-  const trimmedTeamName = teamName.trim();
-  const trimmedTeamLeaderName = teamLeaderName.trim();
+  const trimmedGithubToken = githubToken.trim();
+  const trimmedAiApiKey = aiApiKey.trim();
 
   const isValidGithubRepo = /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/?$/i.test(trimmedRepo);
-  const canSubmit = isValidGithubRepo && trimmedTeamName.length > 0 && trimmedTeamLeaderName.length > 0;
+  const canSubmit = isValidGithubRepo;
+
+  useEffect(() => {
+    const stored = loadStoredAccessKeys();
+    setGithubToken(stored.githubToken);
+    setAiApiKey(stored.aiApiKey);
+  }, []);
+
+  const persistAccessKeys = () => {
+    saveStoredAccessKeys({ githubToken: trimmedGithubToken, aiApiKey: trimmedAiApiKey });
+    setSaveNotice('Access keys saved locally in this browser.');
+    setSupportBanner(null);
+  };
+
+  const clearAccessKeys = () => {
+    clearStoredAccessKeys();
+    setGithubToken('');
+    setAiApiKey('');
+    setSaveNotice('Saved access keys cleared.');
+  };
+
+  const raiseSupportBanner = (message: string) => {
+    setSupportBanner(message);
+    setSaveNotice(null);
+  };
+
+  const beginWriteMode = () => {
+    setAuthorizeWrite(true);
+    setConfirmRepoPermission(true);
+  };
 
   const handleRun = async (mode: 'run-agent' | 'analyze-repository') => {
-    if (!trimmedRepo || !trimmedTeamName || !trimmedTeamLeaderName) {
-      toast.error('Please fill repository, team name, and team leader name');
+    if (!trimmedRepo) {
+      toast.error('Please fill repository URL');
       return;
     }
     if (!isValidGithubRepo) {
@@ -54,9 +86,16 @@ export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps
       toast.message('Please login or register to run pipeline');
       return;
     }
-    if (mode === 'run-agent' && (!authorizeWrite || !confirmRepoPermission)) {
-      toast.error('Please confirm write authorization and repository write permission, or use Analyze Repository (read-only).');
-      return;
+
+    if (mode === 'run-agent') {
+      beginWriteMode();
+      if (!trimmedGithubToken) {
+        raiseSupportBanner(
+          'We are running on empty right now. Paste a GitHub PAT in the Access Vault below so Run Agent can push fixes and raise a PR.'
+        );
+        toast.error('Run Agent needs a saved GitHub PAT for write mode.');
+        return;
+      }
     }
 
     setRunningMode(mode);
@@ -68,10 +107,9 @@ export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           repository_url: trimmedRepo,
-          team_name: trimmedTeamName,
-          team_leader_name: trimmedTeamLeaderName,
           mode,
-          authorize_write: mode === 'run-agent' ? authorizeWrite : false,
+          authorize_write: mode === 'run-agent',
+          github_token: mode === 'run-agent' ? trimmedGithubToken : undefined,
         }),
       });
 
@@ -80,7 +118,9 @@ export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps
         try {
           const body = (await response.json()) as { detail?: string };
           if (body?.detail) detail = body.detail;
-        } catch { /* ignore */ }
+        } catch {
+          // ignore
+        }
         throw new Error(detail);
       }
 
@@ -107,15 +147,30 @@ export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps
         mode === 'run-agent' &&
         (lowerMessage.includes('write authorization') ||
           lowerMessage.includes('write permission') ||
-          lowerMessage.includes('collaborator'));
+          lowerMessage.includes('collaborator') ||
+          lowerMessage.includes('token'));
+
+      const isApiKeyLimitError =
+        lowerMessage.includes('api key') ||
+        lowerMessage.includes('quota') ||
+        lowerMessage.includes('rate limit') ||
+        lowerMessage.includes('insufficient') ||
+        lowerMessage.includes('billing') ||
+        lowerMessage.includes('token expired');
 
       if (isWriteAccessError) {
-        toast.error(`Run Agent blocked: ${message}`, {
-          action: {
-            label: 'Run Analyze Instead',
-            onClick: () => handleRun('analyze-repository'),
-          },
-        });
+        raiseSupportBanner(
+          'The engine is asking for a write key to put the fix branch on GitHub. Drop the PAT into the Access Vault, save it, and Run Agent again.'
+        );
+        toast.error(`Run Agent blocked: ${message}`);
+        return;
+      }
+
+      if (isApiKeyLimitError) {
+        raiseSupportBanner(
+          'Our tiny AI pocket is empty right now. Add your Gemini or OpenAI key in the Access Vault and the magic can keep going.'
+        );
+        toast.error('AI access needs a valid API key or quota.');
         return;
       }
 
@@ -133,8 +188,20 @@ export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps
     <div className="rounded-xl2 border border-border bg-card p-5 shadow-soft">
       <label className="mb-2 block text-sm font-medium text-foreground">GitHub repository URL</label>
       <div className="space-y-3">
+        {supportBanner ? (
+          <section className="rounded-xl border border-amber-400/50 bg-gradient-to-r from-amber-400/15 via-orange-400/10 to-pink-400/15 p-4 text-amber-50 shadow-lg">
+            <div className="flex items-start gap-3">
+              <div className="rounded-full bg-amber-300/20 p-2 text-amber-200">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-semibold text-amber-100">Tiny token tummy rumble</h3>
+                <p className="text-sm leading-6 text-amber-50/90">{supportBanner}</p>
+              </div>
+            </div>
+          </section>
+        ) : null}
 
-        {/* Repo Input + Import Dropdown */}
         <div className="flex gap-2">
           <div className="relative flex-1">
             <Github className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
@@ -146,7 +213,6 @@ export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps
             />
           </div>
 
-          {/* Import from GitHub button — only shown when repos are available */}
           {userRepos.length > 0 && (
             <div className="relative">
               <button
@@ -182,7 +248,6 @@ export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps
             </div>
           )}
 
-          {/* Show spinner while loading repos */}
           {loadingRepos && (
             <div className="flex items-center px-2">
               <LoaderCircle className="h-4 w-4 animate-spin text-muted" />
@@ -190,23 +255,6 @@ export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps
           )}
         </div>
 
-        {/* Team fields */}
-        <div className="grid gap-2 sm:grid-cols-2">
-          <input
-            value={teamName}
-            onChange={(e) => setTeamName(e.target.value)}
-            className="w-full rounded-lg border border-border bg-black/20 px-3 py-2 text-sm text-foreground outline-none ring-info/50 placeholder:text-muted focus:ring-2"
-            placeholder="Team name (e.g., RIFT ORGANISERS)"
-          />
-          <input
-            value={teamLeaderName}
-            onChange={(e) => setTeamLeaderName(e.target.value)}
-            className="w-full rounded-lg border border-border bg-black/20 px-3 py-2 text-sm text-foreground outline-none ring-info/50 placeholder:text-muted focus:ring-2"
-            placeholder="Team leader name (e.g., Saiyam Kumar)"
-          />
-        </div>
-
-        {/* Action buttons */}
         <div className="grid gap-2 sm:grid-cols-2">
           <Button
             onClick={() => handleRun('run-agent')}
@@ -227,7 +275,6 @@ export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps
           </Button>
         </div>
 
-        {/* Checkboxes */}
         <label className="inline-flex items-start gap-2 rounded-lg border border-border bg-black/10 px-3 py-2 text-xs text-muted">
           <input
             type="checkbox"
@@ -247,10 +294,65 @@ export function RepoForm({ userRepos = [], loadingRepos = false }: RepoFormProps
           <span>I confirm this user has collaborator or write access to the repository.</span>
         </label>
 
-        <p className="text-xs text-muted">Enter repository URL, team name, and team leader name to run the agent.</p>
+        <p className="text-xs text-muted">Run Agent auto-enables the write-confirmation flags. Save a GitHub PAT below if you want fix branches and PRs.</p>
+
+        <section className="rounded-xl border border-border bg-black/10 p-4">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Access Vault</h3>
+              <p className="mt-1 text-xs leading-5 text-muted">
+                Paste your GitHub PAT for write mode and optionally store an AI API key for future LLM-powered runs.
+              </p>
+            </div>
+            <div className="rounded-full border border-border bg-black/20 px-2 py-1 text-[11px] text-muted">
+              Public platform
+            </div>
+          </div>
+
+          <div className="grid gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-foreground">GitHub PAT for write mode</label>
+              <input
+                value={githubToken}
+                onChange={(e) => setGithubToken(e.target.value)}
+                className="w-full rounded-lg border border-border bg-black/20 px-3 py-2 text-sm text-foreground outline-none ring-info/50 placeholder:text-muted focus:ring-2"
+                placeholder="ghp_..."
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-foreground">Gemini / OpenAI API key</label>
+              <input
+                value={aiApiKey}
+                onChange={(e) => setAiApiKey(e.target.value)}
+                className="w-full rounded-lg border border-border bg-black/20 px-3 py-2 text-sm text-foreground outline-none ring-info/50 placeholder:text-muted focus:ring-2"
+                placeholder="AIza... or sk-..."
+              />
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={persistAccessKeys}
+                className="inline-flex items-center gap-2 rounded-lg border border-border bg-emerald-500/20 px-3 py-2 text-xs font-medium text-emerald-100 hover:bg-emerald-500/30"
+              >
+                <KeyRound className="h-3.5 w-3.5" />
+                Save access keys
+              </button>
+              <button
+                type="button"
+                onClick={clearAccessKeys}
+                className="inline-flex items-center gap-2 rounded-lg border border-border bg-black/20 px-3 py-2 text-xs font-medium text-muted hover:text-foreground"
+              >
+                Clear saved keys
+              </button>
+            </div>
+            {saveNotice ? <p className="text-xs text-emerald-300">{saveNotice}</p> : null}
+          </div>
+        </section>
+
+        <p className="text-xs text-muted">Enter a repository URL to run the agent or analyze the repo in read-only mode.</p>
       </div>
 
-      {/* Example repos */}
       <div className="mt-3 flex flex-wrap gap-2">
         {exampleRepos.map((item) => (
           <button

@@ -30,7 +30,7 @@ app.add_middleware(
 class RunAgentRequest(BaseModel):
     repo_url: str | None = None
     repository_url: str | None = None
-    team_name: str
+    team_name: str | None = None
     team_leader: str | None = None
     team_leader_name: str | None = None
     mode: str = "run-agent"
@@ -46,8 +46,10 @@ class RunAgentRequest(BaseModel):
             self.team_leader = self.team_leader_name
         if not self.repo_url:
             raise ValueError("repo_url/repository_url is required")
+        if not self.team_name:
+            self.team_name = "Public Platform"
         if not self.team_leader:
-            raise ValueError("team_leader/team_leader_name is required")
+            self.team_leader = "Anonymous Operator"
         return self
 
 
@@ -191,8 +193,8 @@ def _seed_run(request: RunAgentRequest) -> dict:
         "run_id": str(uuid4()),
         "mode": request.mode,
         "repository_url": request.repo_url,
-        "team_name": request.team_name,
-        "team_leader_name": request.team_leader,
+        "team_name": request.team_name or "Public Platform",
+        "team_leader_name": request.team_leader or "Anonymous Operator",
         "branch_name": "",
         "pr_url": "",
         "total_failures_detected": 0,

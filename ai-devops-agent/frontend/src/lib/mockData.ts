@@ -120,8 +120,8 @@ export const historyRuns: RepoRun[] = [
 
 export const defaultRunSummary: RunSummary = {
   repositoryUrl: 'https://github.com/acme/inventory-api',
-  teamName: 'platform_team',
-  teamLeaderName: 'jane_doe',
+  teamName: 'Public Platform',
+  teamLeaderName: 'Anonymous Operator',
   branchName: 'PLATFORM_TEAM_JANE_DOE_AI_Fix',
   totalFailuresDetected: 2,
   totalFixesApplied: 2,

@@ -13,6 +13,7 @@ import { PipelineTimeline } from '@/components/PipelineTimeline';
 import { RunSummaryCard } from '@/components/RunSummaryCard';
 import { StepCard } from '@/components/StepCard';
 import { defaultRunSummary } from '@/lib/mockData';
+import { loadStoredAccessKeys } from '@/lib/accessKeys';
 import { saveLastRunId } from '@/lib/runSession';
 import type { FixSuggestion, LogLine, PipelineStep, RunSummary, StepStatus } from '@/types';
 
@@ -115,6 +116,7 @@ export default function ClientPage({ runId }: ClientPageProps) {
   const [isRestarting, setIsRestarting] = useState(false);
   const [isPromotingToRunAgent, setIsPromotingToRunAgent] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [supportBanner, setSupportBanner] = useState<string | null>(null);
 
   useEffect(() => {
     const apiBase = process.env.NEXT_PUBLIC_AI_ENGINE_API_URL || 'http://localhost:8000';
@@ -154,16 +156,20 @@ export default function ClientPage({ runId }: ClientPageProps) {
   const isRunning = (runData?.final_status || '').toUpperCase() === 'RUNNING';
   const allPassed = summary.finalStatus === 'PASSED';
   const isAnalyzeMode = (runData?.mode || '').toLowerCase() === 'analyze-repository';
+  const storedAccessKeys = loadStoredAccessKeys();
 
   const runAgentFromAnalysis = async () => {
-    if (!runData?.repository_url || !runData?.team_name || !runData?.team_leader_name) {
+    if (!runData?.repository_url) {
       toast.error('Cannot start Run Agent: missing run context');
       return;
     }
 
-    const token = window.prompt('Enter GitHub token for write mode (required to raise PR):')?.trim();
+    const token = storedAccessKeys.githubToken.trim();
     if (!token) {
-      toast.error('Run Agent requires a GitHub token for write mode.');
+      setSupportBanner(
+        'We are running on empty right now. Open the Access Vault on the dashboard, paste a GitHub PAT, save it, and come back to light up write mode.'
+      );
+      toast.error('Run Agent needs a saved GitHub PAT for write mode.');
       return;
     }
 
@@ -175,8 +181,6 @@ export default function ClientPage({ runId }: ClientPageProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           repository_url: runData.repository_url,
-          team_name: runData.team_name,
-          team_leader_name: runData.team_leader_name,
           mode: 'run-agent',
           authorize_write: true,
           github_token: token,
@@ -202,6 +206,19 @@ export default function ClientPage({ runId }: ClientPageProps) {
       router.push(`/run/${data.run_id}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
+      const lowerMessage = message.toLowerCase();
+      const isAccessOrQuotaIssue =
+        lowerMessage.includes('token') ||
+        lowerMessage.includes('quota') ||
+        lowerMessage.includes('rate limit') ||
+        lowerMessage.includes('api key');
+
+      if (isAccessOrQuotaIssue) {
+        setSupportBanner(
+          'The engine is a little hungry. Add a GitHub PAT or an API key in the Access Vault, then the run can keep dancing.'
+        );
+      }
+
       toast.error(`Unable to start Run Agent: ${message}`);
     } finally {
       setIsPromotingToRunAgent(false);
@@ -209,7 +226,7 @@ export default function ClientPage({ runId }: ClientPageProps) {
   };
 
   const restartRun = async () => {
-    if (!runData?.repository_url || !runData?.team_name || !runData?.team_leader_name) {
+    if (!runData?.repository_url) {
       toast.error('Cannot restart: missing run context');
       return;
     }
@@ -217,6 +234,7 @@ export default function ClientPage({ runId }: ClientPageProps) {
     const apiBase = process.env.NEXT_PUBLIC_AI_ENGINE_API_URL || 'http://localhost:8000';
     const currentMode = (runData.mode || 'analyze-repository').toString();
     const restartMode = currentMode === 'run-agent' ? 'run-agent' : 'analyze-repository';
+    const token = storedAccessKeys.githubToken.trim();
 
     setIsRestarting(true);
     try {
@@ -225,10 +243,9 @@ export default function ClientPage({ runId }: ClientPageProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           repository_url: runData.repository_url,
-          team_name: runData.team_name,
-          team_leader_name: runData.team_leader_name,
           mode: restartMode,
           authorize_write: restartMode === 'run-agent',
+          github_token: restartMode === 'run-agent' ? token : undefined,
         }),
       });
 
@@ -251,10 +268,14 @@ export default function ClientPage({ runId }: ClientPageProps) {
       router.push(`/run/${data.run_id}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      const requiresWriteToken = message.toLowerCase().includes('token') || message.toLowerCase().includes('write mode');
+      const lowerMessage = message.toLowerCase();
+      const requiresWriteToken = lowerMessage.includes('token') || lowerMessage.includes('write mode');
 
       if (requiresWriteToken) {
-        toast.error('Restart in write mode requires token. Use Test New Repo to enter token and rerun.');
+        setSupportBanner(
+          'We are running low on GitHub fuel. Visit the dashboard Access Vault, save a PAT, and then try Run Agent again.'
+        );
+        toast.error('Restart in write mode needs a saved GitHub PAT.');
       } else {
         toast.error(`Unable to restart run: ${message}`);
       }
@@ -272,6 +293,13 @@ export default function ClientPage({ runId }: ClientPageProps) {
 
   return (
     <div className="space-y-6">
+      {supportBanner ? (
+        <section className="rounded-xl border border-amber-400/50 bg-gradient-to-r from-amber-400/15 via-orange-400/10 to-pink-400/15 p-4 text-amber-50 shadow-lg">
+          <h3 className="text-base font-semibold text-amber-100">Token pocket is empty</h3>
+          <p className="mt-1 text-sm leading-6 text-amber-50/90">{supportBanner}</p>
+        </section>
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Live Pipeline • {runId}</h1>
