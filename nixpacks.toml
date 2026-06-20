@@ -3,7 +3,7 @@ PYTHONUNBUFFERED = "1"
 PIP_DISABLE_PIP_VERSION_CHECK = "1"
 
 [phases.setup]
-nixPkgs = ["python313", "git"]
+nixPkgs = ["python311", "git"]
 
 [phases.install]
 cmds = [
